@@ -6,8 +6,15 @@ Send photos and videos between your phone and laptop over your own Wi-Fi. Nothin
 
 ## Start it
 
-1. Double-click `start.bat` (or run `node server.js`). Node.js 18+ is required.
-2. If Windows Firewall asks, allow access on **Private networks** only.
+Works on Windows 10/11 and macOS. [Node.js](https://nodejs.org/) 18 or newer is required.
+
+1. Start the server:
+   - **Windows:** double-click `start.bat`.
+   - **macOS:** double-click `start.command`. The first time, macOS may block it because it was downloaded: right-click it, choose **Open**, then **Open** again. If it says you don't have permission, run `chmod +x start.command` in Terminal once.
+   - **Either:** run `node server.js` in a terminal in this folder.
+2. Allow incoming connections when asked:
+   - **Windows Firewall:** allow access on **Private networks** only.
+   - **macOS:** click **Allow** when asked whether `node` may accept incoming network connections.
 3. Your laptop browser opens `https://localhost:8443`. Accept the certificate warning, then press **Pair device**.
 4. On your phone (same Wi-Fi), open the `On your phone:` address printed in the window, e.g. `https://192.168.1.20:8443`.
    Accept the warning, then enter the pairing code shown in the window (or click **Devices → Add a device** on the laptop).
@@ -21,7 +28,7 @@ Phone tip: use "Add to Home Screen" so it opens like an app.
 
 ## Security
 
-- HTTPS only, with a certificate generated on your laptop on first run (stored in `data/`).
+- HTTPS only, with a certificate generated on your laptop on first run (stored in `data/`). Windows uses its built-in PowerShell for this; macOS uses the `openssl` command that comes with the system. If that fails, install OpenSSL with `brew install openssl` and start again.
 - Every device must pair using an 8-character, single-use code that expires after 10 minutes and is replaced after 5 wrong guesses. Attempts are rate-limited per IP.
 - Paired devices hold a random 256-bit token in an HttpOnly, Secure, SameSite=Strict cookie. Only its SHA-256 hash is stored.
 - Revoke any device from **Devices**.

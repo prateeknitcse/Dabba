@@ -30,8 +30,10 @@ const DATA_DIR = path.join(ROOT, 'data');
 const SHARED_DIR = path.resolve(process.env.SHARED_DIR || path.join(ROOT, 'SharedFiles'));
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
-const PFX_FILE = path.join(DATA_DIR, 'cert.pfx');
+const PFX_FILE = path.join(DATA_DIR, 'cert.pfx');   // Windows (PowerShell) certificate
 const PASS_FILE = path.join(DATA_DIR, 'cert.pass');
+const KEY_FILE = path.join(DATA_DIR, 'key.pem');    // macOS / Linux (OpenSSL) certificate
+const CERT_FILE = path.join(DATA_DIR, 'cert.pem');
 const MAX_UPLOAD_BYTES = parseInt(process.env.MAX_UPLOAD_GB || '20', 10) * 1024 * 1024 * 1024;
 const CODE_TTL_MS = 10 * 60 * 1000;
 const MAX_CODE_FAILURES = 5;
@@ -70,55 +72,80 @@ function lanAddresses() {
   return out;
 }
 
+// OpenSSL path, used on macOS and Linux. Works with the LibreSSL that ships with macOS:
+// the subjectAltName goes in a config file (old LibreSSL has no -addext), and the result
+// stays as plain PEM files (converting to .pfx with LibreSSL gives a file Node.js rejects).
+function generateCertOpenSSL(ips) {
+  const confFile = path.join(DATA_DIR, `openssl-${crypto.randomBytes(4).toString('hex')}.cnf`);
+  const conf = [
+    '[req]', 'distinguished_name = dn', 'x509_extensions = v3', 'prompt = no',
+    '[dn]', 'CN = Dabba',
+    '[v3]',
+    'subjectAltName = DNS:localhost,' + ips.map((i) => 'IP:' + i).join(','),
+    'basicConstraints = critical,CA:FALSE',
+    'keyUsage = critical,digitalSignature,keyEncipherment',
+    'extendedKeyUsage = serverAuth',
+    '',
+  ].join('\n');
+  fs.writeFileSync(confFile, conf, { mode: 0o600 });
+  try {
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-days', '825',
+      '-config', confFile, '-keyout', KEY_FILE, '-out', CERT_FILE], { stdio: 'ignore' });
+    fs.chmodSync(KEY_FILE, 0o600);
+  } catch (e) {
+    fs.rmSync(KEY_FILE, { force: true });
+    fs.rmSync(CERT_FILE, { force: true });
+    throw e;
+  } finally {
+    fs.rmSync(confFile, { force: true });
+  }
+}
+
 function generateCert() {
-  const pass = crypto.randomBytes(24).toString('hex');
   const ips = ['127.0.0.1', ...lanAddresses()];
 
-  // Option 1: OpenSSL (macOS / Linux / Git for Windows)
-  try {
-    const keyFile = path.join(DATA_DIR, 'key.pem');
-    const certFile = path.join(DATA_DIR, 'cert.pem');
-    const san = 'subjectAltName=DNS:localhost,' + ips.map((i) => 'IP:' + i).join(',');
-    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-days', '825',
-      '-subj', '/CN=Dabba', '-addext', san, '-keyout', keyFile, '-out', certFile], { stdio: 'ignore' });
-    execFileSync('openssl', ['pkcs12', '-export', '-inkey', keyFile, '-in', certFile,
-      '-out', PFX_FILE, '-passout', 'env:SD_PASS'], { stdio: 'ignore', env: { ...process.env, SD_PASS: pass } });
-    fs.rmSync(keyFile, { force: true });
-    fs.rmSync(certFile, { force: true });
-    fs.writeFileSync(PASS_FILE, pass, { mode: 0o600 });
-    return;
-  } catch (_) { /* fall through */ }
+  if (process.platform !== 'win32') {
+    try {
+      generateCertOpenSSL(ips);
+      return;
+    } catch (_) {
+      const hint = process.platform === 'darwin'
+        ? 'Install OpenSSL with "brew install openssl" and try again.'
+        : 'Install OpenSSL (for example "sudo apt install openssl") and try again.';
+      throw new Error('Could not create a TLS certificate with the "openssl" command. ' + hint);
+    }
+  }
 
-  // Option 2: Windows PowerShell (built into Windows 10/11)
-  if (process.platform === 'win32') {
-    const sanText = '2.5.29.17={text}DNS=localhost&' + ips.map((i) => 'IPAddress=' + i).join('&');
-    const script = `
+  // Windows: PowerShell (built into Windows 10/11)
+  const pass = crypto.randomBytes(24).toString('hex');
+  const sanText = '2.5.29.17={text}DNS=localhost&' + ips.map((i) => 'IPAddress=' + i).join('&');
+  const script = `
 $ErrorActionPreference = 'Stop'
 $c = New-SelfSignedCertificate -Subject 'CN=Dabba' -TextExtension @($env:SD_SAN) ` +
-      `-CertStoreLocation 'Cert:\\CurrentUser\\My' -KeyAlgorithm RSA -KeyLength 2048 ` +
-      `-KeyExportPolicy Exportable -HashAlgorithm SHA256 -NotAfter (Get-Date).AddYears(2)
+    `-CertStoreLocation 'Cert:\\CurrentUser\\My' -KeyAlgorithm RSA -KeyLength 2048 ` +
+    `-KeyExportPolicy Exportable -HashAlgorithm SHA256 -NotAfter (Get-Date).AddYears(2)
 $p = ConvertTo-SecureString -String $env:SD_PASS -Force -AsPlainText
 try { Export-PfxCertificate -Cert $c -FilePath $env:SD_PFX -Password $p -CryptoAlgorithmOption AES256_SHA256 | Out-Null }
 catch { Export-PfxCertificate -Cert $c -FilePath $env:SD_PFX -Password $p | Out-Null }
 Remove-Item -Path ('Cert:\\CurrentUser\\My\\' + $c.Thumbprint) -DeleteKey
 `;
-    const encoded = Buffer.from(script, 'utf16le').toString('base64');
-    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], {
-      stdio: 'ignore',
-      env: { ...process.env, SD_PASS: pass, SD_PFX: PFX_FILE, SD_SAN: sanText },
-    });
-    fs.writeFileSync(PASS_FILE, pass, { mode: 0o600 });
-    return;
-  }
-
-  throw new Error('Could not create a TLS certificate. Install OpenSSL and try again.');
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], {
+    stdio: 'ignore',
+    env: { ...process.env, SD_PASS: pass, SD_PFX: PFX_FILE, SD_SAN: sanText },
+  });
+  fs.writeFileSync(PASS_FILE, pass, { mode: 0o600 });
 }
 
-if (!fs.existsSync(PFX_FILE) || !fs.existsSync(PASS_FILE)) {
+const havePem = () => fs.existsSync(KEY_FILE) && fs.existsSync(CERT_FILE);
+const havePfx = () => fs.existsSync(PFX_FILE) && fs.existsSync(PASS_FILE);
+if (!havePem() && !havePfx()) {
   console.log('Creating a private HTTPS certificate (first run only)...');
   generateCert();
 }
-const tlsOptions = { pfx: fs.readFileSync(PFX_FILE), passphrase: fs.readFileSync(PASS_FILE, 'utf8').trim(), minVersion: 'TLSv1.2' };
+const tlsOptions = havePem()
+  ? { key: fs.readFileSync(KEY_FILE), cert: fs.readFileSync(CERT_FILE), minVersion: 'TLSv1.2' }
+  : { pfx: fs.readFileSync(PFX_FILE), passphrase: fs.readFileSync(PASS_FILE, 'utf8').trim(), minVersion: 'TLSv1.2' };
 
 // ---------------------------------------------------------------------------
 // Pairing codes
@@ -603,8 +630,10 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log('\n  Your browser will warn about the certificate the first time. That is expected:');
     console.log('  the certificate was created on this laptop, not bought from a public authority.');
     newPairingCode();
-    if (process.platform === 'win32' && !process.env.NO_OPEN) {
-      execFile('cmd.exe', ['/c', 'start', '', `https://localhost:${PORT}`], () => {});
+    if (!process.env.NO_OPEN) {
+      const url = `https://localhost:${PORT}`;
+      if (process.platform === 'win32') execFile('cmd.exe', ['/c', 'start', '', url], () => {});
+      else if (process.platform === 'darwin') execFile('open', [url], () => {});
     }
   });
   s.on('error', () => {});

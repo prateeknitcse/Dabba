@@ -52,6 +52,7 @@ Runtime data is written to `data/` (certificate and paired devices) and `SharedF
 | `public/app.js` | Browser logic (pairing, upload queue, file grid, previews, devices) |
 | `public/style.css` | Styles |
 | `start.bat` | Double-click launcher for Windows |
+| `start.command` | Double-click launcher for macOS (must keep Unix line endings and the executable bit) |
 
 ## Making a change
 
@@ -70,6 +71,7 @@ Runtime data is written to `data/` (certificate and paired devices) and `SharedF
    - Files sent from the laptop appear on the phone without refreshing
    - Preview, Save, and Delete work
    - Revoking a device logs it out
+   If you change certificate creation or anything platform-specific, test on both Windows and macOS, or say in the pull request which one you couldn't test.
 5. Update `README.md` if you changed behaviour, settings, or security properties.
 6. Open a pull request that explains what changed and why, and how you tested it. Keep each pull request focused on one change.
 
