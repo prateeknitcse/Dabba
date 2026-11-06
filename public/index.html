@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="referrer" content="no-referrer">
+  <title>Dabba</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img src="/icon.svg" alt="" width="28" height="28"> Dabba</div>
+    <div class="who" id="who"></div>
+  </header>
+
+  <!-- Pairing screen -->
+  <main id="pairView" class="view hidden">
+    <section class="card narrow">
+      <h1>Pair this device</h1>
+      <p class="muted" id="pairHint">Enter the 8-character code shown on your laptop (in the Dabba window, or under <b>Devices &rarr; Add a device</b>).</p>
+      <form id="pairForm" autocomplete="off">
+        <label>Device name
+          <input id="deviceName" maxlength="40" required>
+        </label>
+        <label>Pairing code
+          <input id="pairCode" maxlength="9" placeholder="ABCD-EFGH" autocapitalize="characters" spellcheck="false" required>
+        </label>
+        <button class="primary" type="submit">Pair device</button>
+        <p class="error" id="pairError" role="alert"></p>
+      </form>
+    </section>
+  </main>
+
+  <!-- Main screen -->
+  <main id="mainView" class="view hidden">
+    <label class="dropzone" id="dropzone" for="fileInput">
+      <input type="file" id="fileInput" multiple>
+      <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true"><path fill="currentColor" d="M11 16V7.8l-2.6 2.6L7 9l5-5 5 5-1.4 1.4L13 7.8V16h-2zm-6 4q-.8 0-1.4-.6T3 18v-3h2v3h14v-3h2v3q0 .8-.6 1.4T19 20H5z"/></svg>
+      <strong>Tap to choose photos &amp; videos</strong>
+      <span class="muted desktop-only">or drag &amp; drop files here</span>
+    </label>
+
+    <div id="uploads" class="uploads"></div>
+
+    <div class="toolbar">
+      <h2>Shared files <span class="count" id="fileCount"></span></h2>
+      <div class="actions">
+        <button id="openFolderBtn" class="ghost hidden" type="button">Open folder</button>
+        <button id="devicesBtn" class="ghost" type="button">Devices</button>
+      </div>
+    </div>
+
+    <div id="empty" class="empty hidden">Nothing here yet. Files you send from any paired device show up here.</div>
+    <div id="files" class="grid"></div>
+  </main>
+
+  <!-- Devices dialog -->
+  <dialog id="devicesDialog">
+    <div class="dialog-head">
+      <h2>Paired devices</h2>
+      <button class="ghost close" type="button" data-close>&times;</button>
+    </div>
+    <ul id="deviceList" class="device-list"></ul>
+    <div id="newCodeBox" class="code-box hidden">
+      <p>On your phone, open:</p>
+      <div id="newCodeUrls" class="urls"></div>
+      <p>and enter this code:</p>
+      <div class="big-code" id="newCode"></div>
+      <p class="muted small">Valid for 10 minutes, works once.</p>
+    </div>
+    <button class="primary" id="addDeviceBtn" type="button">Add a device</button>
+  </dialog>
+
+  <!-- Preview dialog -->
+  <dialog id="previewDialog" class="preview">
+    <div class="dialog-head">
+      <span id="previewName" class="ellipsis"></span>
+      <button class="ghost close" type="button" data-close>&times;</button>
+    </div>
+    <div id="previewBody" class="preview-body"></div>
+    <div class="preview-actions">
+      <a id="previewDownload" class="button primary" href="#">Download</a>
+    </div>
+  </dialog>
+
+  <script src="/app.js"></script>
+</body>
+</html>

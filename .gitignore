@@ -1,0 +1,14 @@
+# Runtime data: private certificate key, paired devices, transferred files. Never commit.
+data/
+SharedFiles/
+
+# Extra safety in case key files end up elsewhere
+*.pfx
+*.p12
+*.pem
+*.key
+*.pass
+state.json
+.env
+
+node_modules/
